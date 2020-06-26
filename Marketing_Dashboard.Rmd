@@ -1,0 +1,1383 @@
+---
+title: "Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    theme: readable
+    vertical_layout: fill
+    social: [ "menu"]
+    source_code: embed
+    logo: ~/Desktop/data/CSC.png
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(knitr)
+library(readxl)
+library(plotly)
+library(plyr)
+library(dplyr)
+library(highcharter)
+library(tidyverse)
+library(DT)
+library(anytime)
+library(rpivotTable)
+library(viridis)
+library(RColorBrewer)
+library(leaflet)
+library(tm)
+library(SnowballC)
+library(wordcloud)
+
+#Import Harvard csv file
+Harvard <- read_csv("~/Desktop/Data/Harvard.csv")
+#Import Udemy csv file
+Udemy <- read_csv("~/Desktop/Data/Udemy.csv")
+#Import Cluster excel sheel
+Hcluster <- read_excel("~/Desktop/Data/Cluster.xlsx")
+#Import EDM excel sheel
+EDM <- "~/Desktop/Data/EDM.xlsx" %>%  excel_sheets() %>% set_names() %>%  map(read_excel, path = "~/Desktop/Data/EDM.xlsx") 
+```
+
+```{r dataprep, include=FALSE}
+#create Udemy dataframe
+Udemy <- data.frame(rbind(Udemy))
+#rename columns of dataframe
+UDEMY <- setNames(cbind(rownames(Udemy), Udemy, row.names = NULL), c("No.", "First Name","Last Name", "Agency", "Groups","Course ID","Course Title","Course Duration","% Marked Completed","Mins Video Consumed","Date Enrolled", "Date Started","First Date Completed","Date Completed", "Date Last Accessed","Course Category","Assigned","Assigned By","User is Deactivated"))
+#convert email column into agency acronyms
+UDEMY$Agency <- str_extract(str_to_upper(UDEMY$Agency), "(?<=\\@)[[:alpha:]]+(?=\\.)" )
+
+#create Harvard dataframe
+Hdf <- data.frame(rbind(Harvard))
+#convert email column into agency acronyms
+Hdf$Email <- str_extract(str_to_upper(Hdf$Email), "(?<=\\@)[[:alpha:]]+(?=\\.)" )
+#rename email column as "Agency"
+colnames(Hdf)[4] <- "Agency" 
+#convert cluster page into dataframe and rename columns
+Cluster <- setNames(cbind(rownames(data.frame(rbind(Hcluster))), data.frame(rbind(Hcluster)), row.names = NULL), 
+         c("remove", "Agency", "Cluster")) 
+#remove unecessary column
+Cluster = subset(Cluster, select = -c(remove)) 
+#Combine Harvard dataframe with Cluster dataframe
+clusteranalysis <- left_join(Hdf, Cluster, by = "Agency") 
+#Combine Udemy dataframe with Cluster dataframe
+Uclusteranalysis <- left_join(UDEMY, Cluster, by = "Agency") 
+``` 
+
+WOG {data-orientation=rows}
+=====================================
+
+Row
+-------------------------------------
+
+### Total Unique Harvard Users out of 50,000 Harvard Article Licenses 
+
+```{r Harvard users}
+#valuebox of WOG mean accesses
+valueBox(length(unique(Hdf$UserName)), icon = "fa-user", color = "#D1F2EB") 
+```
+
+
+### Average Article Views Per User 
+
+```{r Learner1}
+#extract columns needed
+Hkeep <- c("UserName","Cluster","Format") 
+#create new dataframe of selected columns
+ldf = clusteranalysis[Hkeep]
+tabl <-as.data.frame(table(ldf$UserName))
+meanH <- round(mean(tabl$Freq),2)
+#valuebox of mean views
+valueBox(meanH, icon = "fa-eye", color = "#E8F8F5") 
+```
+
+### Percentage Harvard Licence Utilisation
+
+```{r harvard utilisation}
+#Gauge widget of harvard licence utilisation percentage
+gauge(round(mean((length(unique(Hdf$UserName))/50000)*100),  
+            digits = 2),
+            min = 0,
+            max = 100, 
+            symbol = '%',
+            label = "Utilisation",
+            gaugeSectors(success = c(50, 100),
+                         warning = c(16, 49),
+                         danger = c(0, 15),
+                         colors = c("#1E8449", "#F7DC6F", "#C0392B")))
+```
+
+
+
+### Total Unique Udemy Users out of 45,000 Udemy Course Licenses 
+
+```{r Udemy users}
+#valuebox of unique udemy users
+valueBox(length(unique(Udemy$User.Email)), icon = "fa-user", color = "#D4E6F1") #WOG mean accesses
+```
+
+
+### Average User Course Attendance
+
+```{r Learner2}
+Uclusteranalysis["User Email"] <- Udemy$User.Email
+#extract columns needed
+Ukeep <- c("User Email","Cluster")
+udf = Uclusteranalysis[Ukeep]
+tablu <- as.data.frame(table(udf$`User Email`))
+meanU <- round(mean(tablu$Freq),2)
+#valuebox of WOG mean accesses
+valueBox(meanU, icon = "fa-graduation-cap", color = "#EAF2F8") 
+```
+
+
+### Percentage Udemy Licence Utilisation 
+
+```{r percentage course completion}
+#gauge of udemy average course completion rate
+gauge(round(mean((length(unique(Udemy$User.Email))/46000)*100),
+            digits = 2),
+            min = 0,
+            max = 100,
+            symbol = '%',
+            label = "Completion",
+            gaugeSectors(success = c(50, 100),
+                         warning = c(16, 49),
+                         danger = c(0, 15),
+                         colors = c("#A3E4D7", "#F7DC6F", "#C0392B")))
+```
+
+Column 
+----------------------------------- 
+
+### Harvard Subjects
+
+```{r WOG chart Harvard 1}
+#Group Harvard dataframe by subject and their respective counts
+p1 <- Hdf %>%
+         group_by(Subject) %>%
+         summarise(count = n())
+
+#Rank in bars ascending order of counts
+p1$Subject <- factor(p1$Subject, levels = unique(p1$Subject)[order(p1$count, decreasing = FALSE)]) 
+
+#Plot bar chart of subjects based on popularity 
+plot_ly(p1, x = ~count, y = ~Subject, color = ~Subject, colors = "BrBG", alpha = 0.5, type = 'bar') %>% 
+    layout(yaxis = list(title = 'Subject'), xaxis = list(title = "Count"), showlegend=FALSE)
+```
+
+
+### Udemy Categories 
+
+```{r WOG chart Harvard 2}
+#Shorten titles that have commas
+UDEMY$Subject <- gsub(",.*$", "", UDEMY$`Course Category`) 
+#Group Udemy dataframe by category and their respective counts
+p2 <- UDEMY %>%
+         group_by(Subject) %>%
+         summarise(count = n())
+#Extract only the top 10 categories
+p2 <-top_n(p2,10)
+#Rank in ascending order
+p2$Subject <- factor(p2$Subject, levels = unique(p2$Subject)[order(p2$count, decreasing = FALSE)]) 
+#Plot bar chart of categories based on count 
+plot_ly(p2, x = ~count, y = ~Subject, color = ~Subject, colors = "BrBG", alpha = 0.5, type = 'bar') %>% layout(yaxis = list(title = 'Top 10 Categories'),xaxis = list(title = "Count"), showlegend=FALSE)
+```
+
+
+Cluster 
+===========================================
+
+Column  {.tabset .tabset-fade}
+----------------------------------- 
+
+### Month-Harvard
+
+```{r month H}
+#keep desired columns 
+clusterH = select(clusteranalysis, 5,6,7,8,9,13,14,15,19)
+#rename fourth column to "Month"
+colnames(clusterH)[4] <- "Month"
+#convert column into conventional date form
+clusterH$Month<- anydate(clusterH$Month)
+#display dates as solely year and month
+clusterH$Month<- format(as.Date(clusterH$Month), "%Y-%m")
+#keep 2 columns only
+keep <- c("Month","Cluster")
+df1 <- table(clusterH[keep])
+dfh <- as.data.frame(df1)
+
+#keep desired columns 
+clusterU <- Uclusteranalysis[c(-1,-2,-3,-5,-6,-8,-10,-19,-18,-17,-11,-15,-13,-14) ]
+#rename fourth column to "Month"
+colnames(clusterU)[4] <- "Month"
+#use dates no earlier than 180 days before today
+clusterU <- subset(clusterU, clusterU$Month > (Sys.Date() - 180)) 
+#display dates as solely year and month
+clusterU$Month<- format(as.Date(clusterU$Month), "%Y-%m")
+#keep 2 columns only
+keep <- c("Month","Cluster")
+df2 <- table(clusterU[keep])
+dfu <- as.data.frame(df2)
+#combine dataframes
+dfu <- left_join(dfh, dfu, by = "Month") 
+#plot harvard views by month
+plot_ly(dfh, x = ~Month, y = ~Freq, color = ~Cluster, colors = "Pastel1") %>%
+  add_bars() %>% layout(legend = list(x = 0, y = 1), xaxis = list( type = 'date', tickformat = "%b %Y"))
+```
+
+
+### Harvard Totals
+
+```{r Harvard overview}
+#group harvard data by cluster and obtain counts for each cluster
+totalH <- clusteranalysis %>% group_by(Cluster) %>% tally()
+#plot bar chart of total views by cluster
+plot_ly(totalH, x = ~Cluster, y = ~n, color = ~Cluster, colors = "Pastel1", type = 'bar') %>%
+layout(yaxis = list(title = 'Total Harvard Titles'),xaxis = list(title = "Cluster")) %>% layout(showlegend=FALSE)
+```
+
+
+### Views per learner 
+
+```{r Learner 1}
+names(tabl) <- c("Agency", "Count")
+tabl$Agency <- str_extract(str_to_upper(tabl$Agency), "(?<=\\@)[[:alpha:]]+(?=\\.)" )
+tablH <- left_join(tabl, Cluster, by = "Agency")
+pal1 <- colorNumeric(
+   palette= "Dark2",
+   domain= tablH$Count)
+tablh <- tablH[order(as.integer(tablH$Count),decreasing = FALSE), ]
+plot_ly(tablh, type = "bar", x = ~Cluster, y = ~Count, color = ~pal1(Count)) %>% layout(barmode = "stack") %>% layout(xaxis = list(title="Learner's Cluster"), yaxis = list(title="Cumulative View Count"), showlegend=FALSE)
+```
+
+
+### Top Central
+
+```{r Central Admin Summary H}
+#Harvard
+CAtitle <- filter(clusteranalysis,Cluster == "Central Administration") %>% group_by(Asset) %>% summarise(Cluster=n())
+CAtitle <- CAtitle  %>%
+     arrange(desc(Cluster))
+CAtitle$row_num <- seq.int(nrow(CAtitle))
+CAtitle <- CAtitle[,c(3,1,2)]
+datatable(CAtitle, rownames = FALSE, colnames=c('Harvard Titles for Central Administration', 'Count'))
+
+```
+
+
+
+
+### Top Infrastructure
+
+```{r Infrastructure summary H}
+INtitle <- filter(clusteranalysis,Cluster == "Infrastructure and Environment") %>% group_by(Asset) %>% summarise(group=n())
+INtitle <- INtitle  %>%
+     arrange(desc(group))
+INtitle$row_num <- seq.int(nrow(INtitle))
+INtitle <- INtitle[,c(3,1,2)]
+datatable(INtitle, rownames = FALSE, colnames=c('Harvard Titles for Infrastructure & Environment', 'Count'))
+```
+
+### Top Social
+
+```{r Social summary H}
+SOtitle <- filter(clusteranalysis,Cluster == "Social") %>% group_by(Asset) %>% summarise(Cluster=n())
+SOtitle <- SOtitle  %>%
+     arrange(desc(Cluster))
+SOtitle$row_num <- seq.int(nrow(SOtitle))
+SOtitle <- SOtitle[,c(3,1,2)]
+datatable(SOtitle, rownames = FALSE, colnames=c('Harvard Titles for Social Sector', 'Count'))
+```
+
+
+### Top Security
+
+```{r Security summary H}
+SEtitle <- filter(clusteranalysis,Cluster == "Security") %>% group_by(Asset) %>% summarise(Cluster=n())
+SEtitle <- SEtitle  %>%
+     arrange(desc(Cluster))
+SEtitle$row_num <- seq.int(nrow(SEtitle))
+SEtitle <- SEtitle[,c(3,1,2)]
+datatable(SEtitle, rownames = FALSE, colnames=c('Harvard Titles for Security Sector', 'Count'))
+```
+
+
+### Top Economy
+
+```{r Economy summary H}
+ECtitle <- filter(clusteranalysis,Cluster == "Economy Building") %>% group_by(Asset) %>% summarise(Cluster=n())
+ECtitle <- ECtitle  %>%
+     arrange(desc(Cluster))
+ECtitle$row_num <- seq.int(nrow(ECtitle))
+ECtitle <- ECtitle[,c(3,1,2)]
+datatable(ECtitle, rownames = FALSE, colnames=c('Harvard Titles for Economy Sector', 'Count'))
+```
+
+
+
+Column  {.tabset .tabset-fade}
+----------------------------------- 
+
+
+### Month-Udemy
+
+```{r month U}
+dfu <- dfu %>% rename(Freq = Freq.y)
+plot_ly(dfu, x = ~Month, y = ~Freq, color = ~Cluster.y, colors = "Pastel1") %>%
+  add_bars() %>% layout(legend = list(x = 0, y = 1), xaxis = list( type = 'date', tickformat = "%b %Y"))
+```
+
+### Udemy Totals
+
+```{r Udemy overview}
+totalU <- Uclusteranalysis %>% group_by(Cluster) %>% tally() 
+plot_ly(totalU, x = ~Cluster, y = ~n, color = ~Cluster, colors = "Pastel1", type = 'bar') %>%
+layout(yaxis = list(title = 'Total Udemy Titles'),xaxis = list(title = "Cluster")) %>% layout(showlegend=FALSE)
+```
+
+
+### Attendance per learner 
+
+```{r Learner 2}
+tablu <- tablu %>% rename( Count= Freq, Agency = Var1) 
+tablu$Agency <- str_extract(str_to_upper(tablu$Agency), "(?<=\\@)[[:alpha:]]+(?=\\.)" )
+tablU <- left_join(tablu, Cluster, by = "Agency")
+pal2 <- colorNumeric(
+   palette= "Dark2",
+   domain= tablU$Count)
+tablU <- tablU[order(as.integer(tablU$Count),decreasing = FALSE), ]
+plot_ly(tablU, type = "bar", x = ~Cluster, y = ~Count, color = ~pal2(Count), alpha=0.7) %>% layout(barmode = "stack") %>% layout(xaxis = list(title="Learner's Cluster"), yaxis = list(title="Cumulative Access Count"), showlegend=FALSE)
+```
+
+
+### Top Central
+
+```{r Central Admin Summary U}
+#Udemy
+CAcat <- filter(Uclusteranalysis,Cluster == "Central Administration") %>% group_by(`Course Title`) %>% summarise(Cluster=n())
+CAcat <- CAcat  %>%
+     arrange(desc(Cluster))
+CAcat$row_num <- seq.int(nrow(CAcat))
+CAcat <- CAcat[,c(3,1,2)]
+datatable(CAcat, rownames = FALSE, colnames=c('Udemy Titles for Central Administration', 'Count'))
+```
+
+
+### Top Infrastructure
+
+```{r Infrastructure summary U}
+INcat <- filter(Uclusteranalysis,Cluster == "Infrastructure and Environment") %>% group_by(`Course Title`) %>% summarise(Cluster=n())
+INcat <- INcat  %>%
+     arrange(desc(Cluster))
+INcat$row_num <- seq.int(nrow(INcat))
+INcat <- INcat[,c(3,1,2)]
+datatable(INcat, rownames = FALSE, colnames=c('Udemy Titles for Infrastructure & Environment', 'Count'))
+```
+
+
+### Top Social
+
+```{r Social summary U}
+SOcat <- filter(Uclusteranalysis,Cluster == "Social") %>% group_by(`Course Title`) %>% summarise(Cluster=n())
+SOcat <- SOcat  %>%
+     arrange(desc(Cluster))
+SOcat$row_num <- seq.int(nrow(SOcat))
+SOcat <- SOcat[,c(3,1,2)]
+datatable(SOcat, rownames = FALSE, colnames=c('Udemy Titles for Social Sector', 'Count'))
+```
+
+
+### Top Security
+
+```{r Security summary U}
+SEcat <- filter(Uclusteranalysis,Cluster == "Security") %>% group_by(`Course Title`) %>% summarise(Cluster=n())
+SEcat <- SEcat  %>%
+     arrange(desc(Cluster))
+SEcat$row_num <- seq.int(nrow(SEcat))
+SEcat <- SEcat[,c(3,1,2)]
+datatable(SEcat, rownames = FALSE, colnames=c('Udemy Titles for Security', 'Count'))
+```
+
+
+### Top Economy
+
+```{r Economy summary U}
+ECcat <- filter(Uclusteranalysis,Cluster == "Economy Building") %>% group_by(`Course Title`) %>% summarise(Cluster=n())
+ECcat <- ECcat  %>%
+     arrange(desc(Cluster))
+ECcat$row_num <- seq.int(nrow(ECcat))
+ECcat <- ECcat[,c(3,1,2)]
+datatable(ECcat, rownames = FALSE, colnames=c('Udemy Titles for Economy Building', 'Count'))
+```
+
+
+Time Series
+========================================
+
+```{r monthly plot H}
+clusteranalysis$Last.Activity.Date <- anydate(clusteranalysis$Last.Activity.Date)
+clusteH <- clusteranalysis[rev(order(as.Date(clusteranalysis$Last.Activity.Date))),]
+tsh <- as.data.frame(table(clusteH$Last.Activity.Date))
+
+DE <- c("Date Enrolled")
+DE = Uclusteranalysis[DE]
+DE <- subset(DE, DE$`Date Enrolled` > (Sys.Date() - 180))
+DE$`Date Enrolled` <- format(as.Date(DE$`Date Enrolled`), "%Y-%m-%d")
+DE <- DE[rev(order(DE$`Date Enrolled`)),]
+tsu <-as.data.frame(table(DE))
+colnames(tsu)[1] <- "Var1"
+tsboth <- merge(tsh,tsu,by="Var1")
+colnames(tsboth)[1] <- "Date"
+colnames(tsboth)[2] <- "Accesses"
+colnames(tsboth)[3] <- "Accessesu"
+
+plot_ly(tsboth, x = ~Date, y = ~Accesses,  type = 'scatter', mode = 'lines', name = 'Harvard Views', line = list(color = "#145A32")) %>% layout(title = "Harvard & Udemy Accesses Over Time",xaxis= list(autotick = F, tickmode = "array", tickvals = c(6,12,24))) %>% add_trace(y = ~Accessesu, name = 'Udemy Enrolment', mode = 'lines', line = list(color = "#3498DB")) %>% rangeslider()
+```
+
+
+Highlights {style="position:relative;"}
+========================================
+
+Column  {.tabset .tabset-fade}
+----------------------------------- 
+
+### Harvard Top 10 Agencies
+
+```{r Harvard tree map}
+tclusteranalysis <- clusteranalysis[!(clusteranalysis$Agency=="GMAIL"),]
+tclusteranalysis <- tclusteranalysis[!(tclusteranalysis$Agency=="YAHOO"),]
+tclusteranalysis <- tclusteranalysis[!(tclusteranalysis$Agency=="CSCOLLEGE"),]
+ hmap <- tclusteranalysis %>%
+     select(Agency) %>%
+     unnest(Agency) %>%
+     group_by(Agency) %>%
+     summarise(Count = n()) %>%
+     arrange(desc(Count))%>%head(10)
+ hmap %>%
+  hchart(type = "treemap", hcaes(x = Agency, value = Count, color = Count))
+ 
+```
+
+
+### Top 3 Subjects
+```{r WOG Harvard pie chart 1}
+n <- length(table(Harvard$Subject))
+H3<-sort(table(Harvard$Subject),partial=n-3)[n-3]
+pie1 <- Harvard %>%
+         group_by(Subject) %>%
+         summarise(count = n()) %>%
+         filter(count>H3) %>%
+         plot_ly(labels = ~Subject,
+                 values = ~count,
+                 textposition = "inside",
+                 textinfo = "percent+label",
+                 insidetextorientation='horizontal',
+                 marker = list(colors = c("#A9CCE3","#A3E4D7","#D7BDE2"))) %>%
+           add_pie(hole = 0.5) %>%
+         layout(xaxis = list(zeroline = F,
+                             showline = F,
+                             showticklabels = F,
+                             showgrid = F),
+                yaxis = list(zeroline = F,
+                             showline = F,
+                             showticklabels=F,
+                             showgrid=F), showlegend=FALSE, annotations=list(text="Top 3 Subjects","showarrow"=F))
+pie1
+```
+
+
+### Top Words Harvard Titles
+```{r wordcloud}
+docs <- Corpus(VectorSource(Hdf$Asset))
+toSpace <- content_transformer(function (x , pattern ) gsub(pattern, " ", x))
+docs <- tm_map(docs, toSpace, "/")
+docs <- tm_map(docs, toSpace, "@")
+docs <- tm_map(docs, toSpace, "\\|")
+docs <- tm_map(docs, content_transformer(tolower)) # Convert the text to lower case
+docs <- tm_map(docs, removeWords, stopwords("english")) # Remove english common stopwords
+docs <- tm_map(docs, removeNumbers) # Remove numbers
+docs <- tm_map(docs, removeWords, c("hbr", "actually","ways","can","make","makes")) # Remove custom stop words
+docs <- tm_map(docs, removePunctuation) # Remove punctuations
+docs <- tm_map(docs, stripWhitespace) # Eliminate extra white spaces
+dtm <- TermDocumentMatrix(docs)
+m <- as.matrix(dtm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+set.seed(1234)
+wordcloud(words = d$word, freq = d$freq, min.freq = 5,
+          max.words=60, random.order=FALSE, rot.per=0, 
+          colors=brewer.pal(4, "BrBG"),family = "serif", font = 2)
+```
+
+
+
+Column {.tabset .tabset-fade}
+----------------------------------- 
+
+
+### Udemy Top 10 Agencies
+```{r Udemy Tree Map}
+tuclusteranalysis <- Uclusteranalysis[!(Uclusteranalysis$Agency=="GMAIL"),]
+umap <- tuclusteranalysis %>%
+         select(Agency) %>%
+         unnest(Agency) %>%
+         group_by(Agency) %>%
+         summarise(Count = n()) %>%
+         arrange(desc(Count))%>%head(10)
+     
+hctreemap2(umap, group_vars = "Agency", size_var = "Count") 
+```
+
+### Top 3 Categories
+
+```{r WOG Udemy pie chart 2}
+n <- length(table(UDEMY$Subject))
+U3<-sort(table(UDEMY$Subject),partial=n-3)[n-3]
+pie2 <- UDEMY %>%
+         group_by(Subject) %>%
+         summarise(count = n()) %>%
+         filter(count>U3) %>% 
+         plot_ly(labels = ~Subject,
+                 values = ~count,
+                 textposition = "inside",
+                 textinfo = "percent+label",
+                 insidetextorientation='horizontal',
+                 marker = list(colors = c("#A9CCE3","#A3E4D7","#D7BDE2"))) %>%
+         add_pie(hole = 0.5) %>%
+         layout(xaxis = list(zeroline = F,
+                             showline = F,
+                             showticklabels = F,
+                             showgrid = F),
+                yaxis = list(zeroline = F,
+                             showline = F,
+                             showticklabels=F,
+                             showgrid=F), showlegend=FALSE, annotations=list(text="Top 3 Categories","showarrow"=F))
+pie2
+```
+
+
+
+### Top Words Udemy Titles
+```{r wordcloud udemy}
+docs <- Corpus(VectorSource(UDEMY$`Course Title`))
+toSpace <- content_transformer(function (x , pattern ) gsub(pattern, " ", x))
+docs <- tm_map(docs, toSpace, "/")
+docs <- tm_map(docs, toSpace, "@")
+docs <- tm_map(docs, toSpace, "\\|")
+# Convert the text to lower case
+docs <- tm_map(docs, content_transformer(tolower))
+# Remove english common stopwords
+docs <- tm_map(docs, removeWords, stopwords("english"))
+# Remove your own stop word
+docs <- tm_map(docs, removeWords, c("cooper","course")) 
+# Remove numbers
+docs <- tm_map(docs, removeNumbers)
+# Remove punctuations
+docs <- tm_map(docs, removePunctuation)
+# Eliminate extra white spaces
+docs <- tm_map(docs, stripWhitespace)
+dtm <- TermDocumentMatrix(docs)
+m <- as.matrix(dtm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+set.seed(1234)
+wordcloud(words = d$word, freq = d$freq, min.freq = 5,
+          max.words=50, random.order=FALSE, rot.per=0, 
+          colors=brewer.pal(4, "BrBG"),family = "serif", font = 2)
+```
+
+
+### Full Categories 
+
+```{r full Udemy barplot}
+UDEMY$Subject <- str_extract(UDEMY$`Course Category`, '[[:alnum:]]+')
+p3 <- UDEMY %>%
+         group_by(Subject) %>%
+         summarise(count = n())
+p3$Subject <- factor(p3$Subject, levels = unique(p3$Subject)[order(p3$count, decreasing = FALSE)])
+
+         plot_ly(p3, x = ~count,
+                 y = ~Subject,
+                 color = ~Subject,
+                 type = 'bar') %>%
+layout(yaxis = list(title = 'Udemy Category'), xaxis = list(title = 'Categories have been grouped by leading word'), showlegend = FALSE)
+```
+
+
+Pivot Table
+===========================================
+
+Row  {.tabset .tabset-fade} 
+----------------------------------- 
+
+### Harvard PivotTable
+```{css, Pivot Table CSS, echo = FALSE}
+.rpivotTable{ overflow : scroll; }
+```
+
+```{r Pivot Table Harvard}
+rpivotTable(clusterH,
+            aggregatorName = "Count",
+            cols= "Month",
+            rows = "Subject",
+             rendererName = "Area Chart", menuLimit = 30000)
+```
+
+
+### Udemy PivotTable
+
+```{r Pivot Table Udemy}
+rpivotTable(clusterU,
+            aggregatorName = "Count",
+            cols= "Cluster",
+            rows = "Course Category",
+            rendererName = "Heatmap", menuLimit = 30000)
+```
+
+
+```{r EDM setup, include=FALSE}
+Caps <- function(x) {
+  s <- strsplit(x, " ")[[1]]
+  paste(toupper(substring(s, 1,1)), substring(s, 2),
+        sep="", collapse=" ")
+}
+trim.trailing <- function (x) sub("-", " ", x)
+
+colnames(clusterU)[2] <- "Asset"
+keep <- c("Asset","Cluster") 
+clusterh = clusterH[keep]
+#create new dataframe of selected columns
+clusteru = clusterU[keep]
+clusters <- rbind(clusterh, clusteru)
+clusters$Asset <- trim.trailing(clusters$Asset)
+clusters$Asset <- sapply(clusters$Asset, Caps)
+clusters <- as.data.frame(clusters)
+
+n <- length(EDM) 
+
+EDM1 <- EDM[[n]][,1, drop=FALSE]
+EDM1 <- tail(EDM1,-4)
+EDM1 <- trim.trailing(EDM1$`EDM title`)
+EDM1 <- sapply(EDM1, Caps)
+EDM1 <- as.data.frame(EDM1)
+colnames(EDM1)[1] <- "Asset"
+EDM1a <- left_join(EDM1, clusters, by = "Asset")
+EDM1a$Count <- rep(1,nrow(EDM1a))
+EDM1 <- na.omit(EDM1a)
+na1 <- anti_join(EDM1a, EDM1, by="Asset")
+EDM1$wrappedx <- sapply(EDM1$Asset, 
+                      FUN = function(Asset) {paste(strwrap(Asset, width = 15), collapse = "<br>")})
+
+EDM2 <- EDM[[n-1]][,1, drop=FALSE]
+EDM2 <- tail(EDM2,-4)
+EDM2 <- trim.trailing(EDM2$`EDM title`)
+EDM2 <- sapply(EDM2, Caps)
+EDM2 <- as.data.frame(EDM2)
+colnames(EDM2)[1] <- "Asset"
+EDM2a <- left_join(EDM2, clusters, by = "Asset")
+EDM2a$Count <- rep(1,nrow(EDM2a))
+EDM2 <- na.omit(EDM2a)
+na2 <- anti_join(EDM2a, EDM2, by="Asset")
+EDM2$wrappedx <- sapply(EDM2$Asset, 
+                      FUN = function(Asset) {paste(strwrap(Asset, width = 15), collapse = "<br>")})
+
+EDM3 <- EDM[[n-2]][,1, drop=FALSE]
+EDM3 <- tail(EDM3,-4)
+EDM3 <- trim.trailing(EDM3$`EDM title`)
+EDM3 <- sapply(EDM3, Caps)
+EDM3 <- as.data.frame(EDM3)
+colnames(EDM3)[1] <- "Asset"
+EDM3a <- left_join(EDM3, clusters, by = "Asset")
+EDM3a$Count <- rep(1,nrow(EDM3a))
+EDM3 <- na.omit(EDM3a)
+na3 <- anti_join(EDM3a, EDM3, by="Asset")
+EDM3$wrappedx <- sapply(EDM3$Asset, 
+                      FUN = function(Asset) {paste(strwrap(Asset, width = 15), collapse = "<br>")})
+
+EDM4 <- EDM[[n-3]][,1, drop=FALSE]
+EDM4 <- tail(EDM4,-4)
+EDM4 <- trim.trailing(EDM4$`EDM title`)
+EDM4 <- sapply(EDM4, Caps)
+EDM4 <- as.data.frame(EDM4)
+colnames(EDM4)[1] <- "Asset"
+EDM4a <- left_join(EDM4, clusters, by = "Asset")
+EDM4a$Count <- rep(1,nrow(EDM4a))
+EDM4 <- na.omit(EDM4a)
+na4 <- anti_join(EDM4a, EDM4, by="Asset")
+EDM4$wrappedx <- sapply(EDM4$Asset, 
+                      FUN = function(Asset) {paste(strwrap(Asset, width = 15), collapse = "<br>")})
+
+EDM5 <- EDM[[n-4]][,1, drop=FALSE]
+EDM5 <- tail(EDM5,-4)
+EDM5 <- trim.trailing(EDM5$`EDM title`)
+EDM5 <- sapply(EDM5, Caps)
+EDM5 <- as.data.frame(EDM5)
+colnames(EDM5)[1] <- "Asset"
+EDM5a <- left_join(EDM5, clusters, by = "Asset")
+EDM5a$Count <- rep(1,nrow(EDM5a))
+EDM5 <- na.omit(EDM5a)
+na5 <- anti_join(EDM5a, EDM5, by="Asset")
+EDM5$wrappedx <- sapply(EDM5$Asset, 
+                      FUN = function(Asset) {paste(strwrap(Asset, width = 15), collapse = "<br>")})
+
+EDM6 <- EDM[[n-5]][,1, drop=FALSE]
+EDM6 <- tail(EDM6,-4)
+EDM6 <- trim.trailing(EDM6$`EDM title`)
+EDM6 <- sapply(EDM6, Caps)
+EDM6 <- as.data.frame(EDM6)
+colnames(EDM6)[1] <- "Asset"
+EDM6a <- left_join(EDM6, clusters, by = "Asset")
+EDM6a$Count <- rep(1,nrow(EDM6a))
+EDM6 <- na.omit(EDM6a)
+na6 <- anti_join(EDM6a, EDM6, by="Asset")
+EDM6$wrappedx <- sapply(EDM6$Asset, 
+                      FUN = function(Asset) {paste(strwrap(Asset, width = 15), collapse = "<br>")})
+
+EDM7 <- EDM[[n-6]][,1, drop=FALSE]
+EDM7 <- tail(EDM7,-4)
+EDM7 <- trim.trailing(EDM7$`EDM title`)
+EDM7 <- sapply(EDM7, Caps)
+EDM7 <- as.data.frame(EDM7)
+colnames(EDM7)[1] <- "Asset"
+EDM7a <- left_join(EDM7, clusters, by = "Asset")
+EDM7a$Count <- rep(1,nrow(EDM7a))
+EDM7 <- na.omit(EDM7a)
+na7 <- anti_join(EDM7a, EDM7, by="Asset")
+EDM7$wrappedx <- sapply(EDM7$Asset, 
+                      FUN = function(Asset) {paste(strwrap(Asset, width = 15), collapse = "<br>")})
+
+EDM8 <- EDM[[n-7]][,1, drop=FALSE]
+EDM8 <- tail(EDM8,-4)
+EDM8 <- trim.trailing(EDM8$`EDM title`)
+EDM8 <- sapply(EDM8, Caps)
+EDM8 <- as.data.frame(EDM8)
+colnames(EDM8)[1] <- "Asset"
+EDM8a <- left_join(EDM8, clusters, by = "Asset")
+EDM8a$Count <- rep(1,nrow(EDM8a))
+EDM8 <- na.omit(EDM8a)
+na8 <- anti_join(EDM8a, EDM8, by="Asset")
+EDM8$wrappedx <- sapply(EDM8$Asset, 
+                      FUN = function(Asset) {paste(strwrap(Asset, width = 15), collapse = "<br>")})
+
+EDM9 <- EDM[[n-8]][,1, drop=FALSE]
+EDM9 <- tail(EDM9,-4)
+EDM9 <- trim.trailing(EDM9$`EDM title`)
+EDM9 <- sapply(EDM9, Caps)
+EDM9 <- as.data.frame(EDM9)
+colnames(EDM9)[1] <- "Asset"
+EDM9a <- left_join(EDM9, clusters, by = "Asset")
+EDM9a$Count <- rep(1,nrow(EDM9a))
+EDM9 <- na.omit(EDM9a)
+na9 <- anti_join(EDM9a, EDM9, by="Asset")
+EDM9$wrappedx <- sapply(EDM9$Asset, 
+                      FUN = function(Asset) {paste(strwrap(Asset, width = 15), collapse = "<br>")})
+
+EDM10 <- EDM[[n-9]][,1, drop=FALSE]
+EDM10 <- tail(EDM10,-4)
+EDM10 <- trim.trailing(EDM10$`EDM title`)
+EDM10 <- sapply(EDM10, Caps)
+EDM10 <- as.data.frame(EDM10)
+colnames(EDM10)[1] <- "Asset"
+EDM10a <- left_join(EDM10, clusters, by = "Asset")
+EDM10a$Count <- rep(1,nrow(EDM10a))
+EDM10 <- na.omit(EDM10a)
+na10 <- anti_join(EDM10a, EDM10, by="Asset")
+EDM10$wrappedx <- sapply(EDM10$Asset, 
+                      FUN = function(Asset) {paste(strwrap(Asset, width = 15), collapse = "<br>")})
+
+
+EDM11 <- EDM[[n-10]][,1, drop=FALSE]
+EDM11 <- tail(EDM11,-4)
+EDM11 <- trim.trailing(EDM11$`EDM title`)
+EDM11 <- sapply(EDM11, Caps)
+EDM11 <- as.data.frame(EDM11)
+colnames(EDM11)[1] <- "Asset"
+EDM11a <- left_join(EDM11, clusters, by = "Asset")
+EDM11a$Count <- rep(1,nrow(EDM11a))
+EDM11 <- na.omit(EDM11a)
+na11 <- anti_join(EDM11a, EDM11, by="Asset")
+EDM11$wrappedx <- sapply(EDM11$Asset, 
+                      FUN = function(Asset) {paste(strwrap(Asset, width = 15), collapse = "<br>")})
+
+EDM12 <- EDM[[n-11]][,1, drop=FALSE]
+EDM12 <- tail(EDM12,-4)
+EDM12 <- trim.trailing(EDM12$`EDM title`)
+EDM12 <- sapply(EDM12, Caps)
+EDM12 <- as.data.frame(EDM12)
+colnames(EDM12)[1] <- "Asset"
+EDM12a <- left_join(EDM12, clusters, by = "Asset")
+EDM12a$Count <- rep(1,nrow(EDM12a))
+EDM12 <- na.omit(EDM12a)
+na12 <- anti_join(EDM12a, EDM12, by="Asset")
+EDM12$wrappedx <- sapply(EDM12$Asset, 
+                      FUN = function(Asset) {paste(strwrap(Asset, width = 15), collapse = "<br>")})
+
+EDM13 <- EDM[[n-12]][,1, drop=FALSE]
+EDM13 <- tail(EDM13,-4)
+EDM13 <- trim.trailing(EDM13$`EDM title`)
+EDM13 <- sapply(EDM13, Caps)
+EDM13 <- as.data.frame(EDM13)
+colnames(EDM13)[1] <- "Asset"
+EDM13a <- left_join(EDM13, clusters, by = "Asset")
+EDM13a$Count <- rep(1,nrow(EDM13a))
+EDM13 <- na.omit(EDM13a)
+na13 <- anti_join(EDM13a, EDM13, by="Asset")
+EDM13$wrappedx <- sapply(EDM13$Asset, 
+                      FUN = function(Asset) {paste(strwrap(Asset, width = 15), collapse = "<br>")})
+
+EDM14 <- EDM[[n-13]][,1, drop=FALSE]
+EDM14 <- tail(EDM14,-4)
+EDM14 <- trim.trailing(EDM14$`EDM title`)
+EDM14 <- sapply(EDM14, Caps)
+EDM14 <- as.data.frame(EDM14)
+colnames(EDM14)[1] <- "Asset"
+EDM14a <- left_join(EDM14, clusters, by = "Asset")
+EDM14a$Count <- rep(1,nrow(EDM14a))
+EDM14 <- na.omit(EDM14a)
+na14 <- anti_join(EDM14a, EDM14, by="Asset")
+EDM14$wrappedx <- sapply(EDM14$Asset, 
+                      FUN = function(Asset) {paste(strwrap(Asset, width = 15), collapse = "<br>")})
+
+EDM15 <- EDM[[n-14]][,1, drop=FALSE]
+EDM15 <- tail(EDM15,-4)
+EDM15 <- trim.trailing(EDM15$`EDM title`)
+EDM15 <- sapply(EDM15, Caps)
+EDM15 <- as.data.frame(EDM15)
+colnames(EDM15)[1] <- "Asset"
+EDM15a <- left_join(EDM15, clusters, by = "Asset")
+EDM15a$Count <- rep(1,nrow(EDM15a))
+EDM15 <- na.omit(EDM15a)
+na15 <- anti_join(EDM15a, EDM15, by="Asset")
+EDM15$wrappedx <- sapply(EDM15$Asset, 
+                      FUN = function(Asset) {paste(strwrap(Asset, width = 15), collapse = "<br>")})
+```
+
+`r names(EDM[n])`  {data-navmenu="EDM"} 
+===========================================
+
+### `r if(length(unique(EDM1$Asset))>7){print("Drag graph to see more")}`
+```{r EDM1}
+edm1stats <- EDM1a %>% group_by(Asset) %>% tally()
+edm1cluster <- EDM1 %>% group_by(Cluster) %>% tally()
+edm1cluster <- na.omit(edm1cluster)
+plot_ly(EDM1, type = "bar", x = ~wrappedx, y = ~Count, text = ~Cluster, textposition = "auto", hoverinfo = "text", color = ~Cluster, colors = "Pastel1") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n]), xaxis = list(title=FALSE, tickangle = 0,  range = c(0,if(length(unique(EDM1$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+```
+
+EDM Statistics {.sidebar data-width=300}
+-----------------------------------------------------------------------
+
+There are `r length(unique(EDM1a$Asset))` titles in this EDM
+
+On average, there are `r round(mean(edm1stats$n),2)` views per title.
+
+The most popular title in this EDM and its view count is: `r head(subset(edm1stats, edm1stats[,2] == max(edm1stats$n)),1)` views. 
+
+The highest viewing cluster and its cumulative view count is: `r head(subset(edm1cluster, edm1cluster[,2] == max(edm1cluster$n)),1)` views.
+
+The lowest viewing cluster and its cumulative view count is `r head(subset(edm1cluster, edm1cluster[,2] == min(edm1cluster$n)),1)` views. 
+
+There is/are `r length(unique(na1$Asset))` title(s) without views from any cluster: `r unique(na1$Asset)`
+
+
+`r names(EDM[n-1])`  {data-navmenu="EDM"}
+===========================================
+### `r if(length(unique(EDM1$Asset))>7){print("Drag graph to see more")}`
+```{r EDM2}
+edm2stats <- EDM2a %>% group_by(Asset) %>% tally()
+edm2cluster <- EDM2 %>% group_by(Cluster) %>% tally()
+edm2cluster <- na.omit(edm2cluster)
+plot_ly(EDM2, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-1]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM2$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+```
+
+EDM Statistics {.sidebar data-width=300}
+-----------------------------------------------------------------------
+
+There are `r length(unique(EDM2a$Asset))` titles in this EDM
+
+On average, there are `r round(mean(edm2stats$n),2)` views per title.
+
+The most popular title in this EDM and its view count is: `r head(subset(edm2stats, edm2stats[,2] == max(edm2stats$n)),1)` views. 
+
+The highest viewing cluster and its cumulative view count is: `r head(subset(edm2cluster, edm2cluster[,2] == max(edm2cluster$n)),1)` views.
+
+The lowest viewing cluster and its cumulative view count is `r head(subset(edm2cluster, edm2cluster[,2] == min(edm2cluster$n)),1)` views. 
+
+There is/are `r length(unique(na2$Asset))` title(s) without views from any cluster: `r unique(na2$Asset)`
+
+`r names(EDM[n-2])` {data-navmenu="EDM"}
+===========================================
+### `r if(length(unique(EDM3$Asset))>7){print("Drag graph to see more")}`
+```{r EDM3}
+edm3stats <- EDM3a %>% group_by(Asset) %>% tally()
+edm3cluster <- EDM3 %>% group_by(Cluster) %>% tally()
+edm3cluster <- na.omit(edm3cluster)
+plot_ly(EDM3, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-2]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM3$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+```
+
+EDM Statistics {.sidebar data-width=300}
+-----------------------------------------------------------------------
+
+There are `r length(unique(EDM3a$Asset))` titles in this EDM
+
+On average, there are `r round(mean(edm3stats$n),2)` views per title.
+
+The most popular title in this EDM and its view count is: `r head(subset(edm3stats, edm3stats[,2] == max(edm3stats$n)),1)` views. 
+
+The highest viewing cluster and its cumulative view count is: `r head(subset(edm3cluster, edm3cluster[,2] == max(edm3cluster$n)),1)` views.
+
+The lowest viewing cluster and its cumulative view count is `r head(subset(edm3cluster, edm3cluster[,2] == min(edm3cluster$n)),1)` views. 
+
+There is/are `r length(unique(na3$Asset))` title(s) without views from any cluster: `r unique(na3$Asset)`
+
+`r names(EDM[n-3])` {data-navmenu="EDM"}
+===========================================
+### `r if(length(unique(EDM4$Asset))>7){print("Drag graph to see more")}`
+```{r EDM4}
+edm4stats <- EDM4a %>% group_by(Asset) %>% tally()
+edm4cluster <- EDM4 %>% group_by(Cluster) %>% tally()
+edm4cluster <- na.omit(edm4cluster)
+plot_ly(EDM4, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-3]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM4$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan") 
+```
+
+EDM Statistics {.sidebar data-width=300}
+-----------------------------------------------------------------------
+
+There are `r length(unique(EDM4a$Asset))` titles in this EDM
+
+On average, there are `r round(mean(edm4stats$n),2)` views per title.
+
+The most popular title in this EDM and its view count is: `r head(subset(edm4stats, edm4stats[,2] == max(edm4stats$n)),1)` views. 
+
+The highest viewing cluster and its cumulative view count is: `r head(subset(edm4cluster, edm4cluster[,2] == max(edm4cluster$n)),1)` views.
+
+The lowest viewing cluster and its cumulative view count is `r head(subset(edm4cluster, edm4cluster[,2] == min(edm4cluster$n)),1)` views. 
+
+There is/are `r length(unique(na4$Asset))` title(s) without views from any cluster: `r unique(na4$Asset)`
+
+`r names(EDM[n-4])` {data-navmenu="EDM"}
+===========================================
+
+### `r if(length(unique(EDM5$Asset))>7){print("Drag graph to see more")}`
+```{r EDM5}
+edm5stats <- EDM5a %>% group_by(Asset) %>% tally()
+edm5cluster <- EDM5 %>% group_by(Cluster) %>% tally()
+edm5cluster <- na.omit(edm5cluster)
+plot_ly(EDM5, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-4]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM5$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+```
+
+EDM Statistics {.sidebar data-width=300}
+-----------------------------------------------------------------------
+
+There are `r length(unique(EDM5a$Asset))` titles in this EDM
+
+On average, there are `r round(mean(edm5stats$n),2)` views per title.
+
+The most popular title in this EDM and its view count is: `r head(subset(edm5stats, edm5stats[,2] == max(edm5stats$n)),1)` views. 
+
+The highest viewing cluster and its cumulative view count is: `r head(subset(edm5cluster, edm5cluster[,2] == max(edm5cluster$n)),1)` views.
+
+The lowest viewing cluster and its cumulative view count is `r head(subset(edm5cluster, edm5cluster[,2] == min(edm5cluster$n)),1)` views. 
+
+There is/are `r length(unique(na5$Asset))` title(s) without views from any cluster: `r unique(na5$Asset)`
+
+`r names(EDM[n-5])` {data-navmenu="EDM"}
+===========================================
+### `r if(length(unique(EDM6$Asset))>7){print("Drag graph to see more")}`
+```{r EDM6}
+edm6stats <- EDM6a %>% group_by(Asset) %>% tally()
+edm6cluster <- EDM6 %>% group_by(Cluster) %>% tally()
+edm6cluster <- na.omit(edm6cluster)
+plot_ly(EDM6, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-5]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM6$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+```
+
+EDM Statistics {.sidebar data-width=300}
+-----------------------------------------------------------------------
+
+There are `r length(unique(EDM6a$Asset))` titles in this EDM
+
+On average, there are `r round(mean(edm6stats$n),2)` views per title.
+
+The most popular title in this EDM and its view count is: `r head(subset(edm6stats, edm6stats[,2] == max(edm6stats$n)),1)` views. 
+
+The highest viewing cluster and its cumulative view count is: `r head(subset(edm6cluster, edm6cluster[,2] == max(edm6cluster$n)),1)` views.
+
+The lowest viewing cluster and its cumulative view count is `r head(subset(edm6cluster, edm6cluster[,2] == min(edm6cluster$n)),1)` views. 
+
+There is/are `r length(unique(na6$Asset))` title(s) without views from any cluster: `r unique(na6$Asset)`
+
+`r names(EDM[n-6])` {data-navmenu="EDM"}
+===========================================
+### `r if(length(unique(EDM7$Asset))>7){print("Drag graph to see more")}`
+```{r EDM7}
+edm7stats <- EDM7a %>% group_by(Asset) %>% tally()
+edm7cluster <- EDM7 %>% group_by(Cluster) %>% tally()
+edm7cluster <- na.omit(edm7cluster)
+plot_ly(EDM7, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-6]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM7$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+```
+
+EDM Statistics {.sidebar data-width=300}
+-----------------------------------------------------------------------
+
+There are `r length(unique(EDM7a$Asset))` titles in this EDM
+
+On average, there are `r round(mean(edm7stats$n),2)` views per title.
+
+The most popular title in this EDM and its view count is: `r head(subset(edm7stats, edm7stats[,2] == max(edm7stats$n)),1)` views. 
+
+The highest viewing cluster and its cumulative view count is: `r head(subset(edm7cluster, edm7cluster[,2] == max(edm7cluster$n)),1)` views.
+
+The lowest viewing cluster and its cumulative view count is `r head(subset(edm7cluster, edm7cluster[,2] == min(edm7cluster$n)),1)` views. 
+
+There is/are `r length(unique(na7$Asset))` title(s) without views from any cluster: `r unique(na7$Asset)`
+
+`r names(EDM[n-7])` {data-navmenu="EDM"}
+===========================================
+### `r if(length(unique(EDM8$Asset))>7){print("Drag graph to see more")}`
+```{r EDM8}
+edm8stats <- EDM8a %>% group_by(Asset) %>% tally()
+edm8cluster <- EDM8 %>% group_by(Cluster) %>% tally()
+edm8cluster <- na.omit(edm8cluster)
+plot_ly(EDM8, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-7]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM8$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+```
+
+EDM Statistics {.sidebar data-width=300}
+-----------------------------------------------------------------------
+
+There are `r length(unique(EDM8a$Asset))` titles in this EDM
+
+On average, there are `r round(mean(edm8stats$n),2)` views per title.
+
+The most popular title in this EDM and its view count is: `r head(subset(edm8stats, edm8stats[,2] == max(edm8stats$n)),1)` views. 
+
+The highest viewing cluster and its cumulative view count is: `r head(subset(edm8cluster, edm8cluster[,2] == max(edm8cluster$n)),1)` views.
+
+The lowest viewing cluster and its cumulative view count is `r head(subset(edm8cluster, edm8cluster[,2] == min(edm8cluster$n)),1)` views. 
+
+There is/are `r length(unique(na8$Asset))` title(s) without views from any cluster: `r unique(na8$Asset)`
+
+`r names(EDM[n-8])` {data-navmenu="EDM"}
+===========================================
+### `r if(length(unique(EDM9$Asset))>7){print("Drag graph to see more")}`
+```{r EDM9}
+edm9stats <- EDM9a %>% group_by(Asset) %>% tally()
+edm9cluster <- EDM9 %>% group_by(Cluster) %>% tally()
+edm9cluster <- na.omit(edm9cluster)
+plot_ly(EDM9, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-8]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM9$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+```
+
+EDM Statistics {.sidebar data-width=300}
+-----------------------------------------------------------------------
+
+There are `r length(unique(EDM9a$Asset))` titles in this EDM
+
+On average, there are `r round(mean(edm9stats$n),2)` views per title.
+
+The most popular title in this EDM and its view count is: `r head(subset(edm9stats, edm9stats[,2] == max(edm9stats$n)),1)` views. 
+
+The highest viewing cluster and its cumulative view count is: `r head(subset(edm9cluster, edm9cluster[,2] == max(edm9cluster$n)),1)` views.
+
+The lowest viewing cluster and its cumulative view count is `r head(subset(edm9cluster, edm9cluster[,2] == min(edm9cluster$n)),1)` views. 
+
+There is/are `r length(unique(na9$Asset))` title(s) without views from any cluster: `r unique(na9$Asset)`
+
+`r names(EDM[n-9])` {data-navmenu="EDM"}
+===========================================
+### `r if(length(unique(EDM10$Asset))>7){print("Drag graph to see more")}`
+```{r EDM10}
+edm10stats <- EDM10a %>% group_by(Asset) %>% tally()
+edm10cluster <- EDM10 %>% group_by(Cluster) %>% tally()
+edm10cluster <- na.omit(edm10cluster)
+plot_ly(EDM10, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-9]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM10$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+```
+
+EDM Statistics {.sidebar data-width=300}
+-----------------------------------------------------------------------
+
+There are `r length(unique(EDM10a$Asset))` titles in this EDM
+
+On average, there are `r round(mean(edm10stats$n),2)` views per title.
+
+The most popular title in this EDM and its view count is: `r head(subset(edm10stats, edm10stats[,2] == max(edm10stats$n)),1)` views. 
+
+The highest viewing cluster and its cumulative view count is: `r head(subset(edm10cluster, edm10cluster[,2] == max(edm10cluster$n)),1)` views.
+
+The lowest viewing cluster and its cumulative view count is `r head(subset(edm10cluster, edm10cluster[,2] == min(edm10cluster$n)),1)` views. 
+
+There is/are `r length(unique(na10$Asset))` title(s) without views from any cluster: `r unique(na10$Asset)`
+
+`r names(EDM[n-10])` {data-navmenu="EDM"}
+===========================================
+### `r if(length(unique(EDM11$Asset))>7){print("Drag graph to see more")}`
+```{r EDM11}
+edm11stats <- EDM11a %>% group_by(Asset) %>% tally()
+edm11cluster <- EDM11 %>% group_by(Cluster) %>% tally()
+edm11cluster <- na.omit(edm11cluster)
+plot_ly(EDM11, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-10]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM11$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+```
+
+EDM Statistics {.sidebar data-width=300}
+-----------------------------------------------------------------------
+
+There are `r length(unique(EDM11a$Asset))` titles in this EDM
+
+On average, there are `r round(mean(edm11stats$n),2)` views per title.
+
+The most popular title in this EDM and its view count is: `r head(subset(edm11stats, edm11stats[,2] == max(edm11stats$n)),1)` views. 
+
+The highest viewing cluster and its cumulative view count is: `r head(subset(edm11cluster, edm11cluster[,2] == max(edm11cluster$n)),1)` views.
+
+The lowest viewing cluster and its cumulative view count is `r head(subset(edm11cluster, edm11cluster[,2] == min(edm11cluster$n)),1)` views. 
+
+There is/are `r length(unique(na11$Asset))` title(s) without views from any cluster: `r unique(na11$Asset)`
+
+`r names(EDM[n-11])` {data-navmenu="EDM"}
+===========================================
+### `r if(length(unique(EDM12$Asset))>7){print("Drag graph to see more")}`
+```{r EDM12}
+edm12stats <- EDM12a %>% group_by(Asset) %>% tally()
+edm12cluster <- EDM12 %>% group_by(Cluster) %>% tally()
+edm12cluster <- na.omit(edm12cluster)
+plot_ly(EDM12, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-11]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM12$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+```
+
+EDM Statistics {.sidebar data-width=300}
+-----------------------------------------------------------------------
+
+There are `r length(unique(EDM12a$Asset))` titles in this EDM
+
+On average, there are `r round(mean(edm12stats$n),2)` views per title.
+
+The most popular title in this EDM and its view count is: `r head(subset(edm12stats, edm12stats[,2] == max(edm12stats$n)),1)` views. 
+
+The highest viewing cluster and its cumulative view count is: `r head(subset(edm12cluster, edm12cluster[,2] == max(edm12cluster$n)),1)` views.
+
+The lowest viewing cluster and its cumulative view count is `r head(subset(edm12cluster, edm12cluster[,2] == min(edm12cluster$n)),1)` views. 
+
+There is/are `r length(unique(na12$Asset))` title(s) without views from any cluster: `r unique(na12$Asset)`
+
+`r names(EDM[n-12])` {data-navmenu="EDM"}
+===========================================
+### `r if(length(unique(EDM13$Asset))>7){print("Drag graph to see more")}`
+```{r EDM13}
+edm13stats <- EDM13 %>% group_by(Asset) %>% tally()
+edm13cluster <- EDM13 %>% group_by(Cluster) %>% tally()
+edm13cluster <- na.omit(edm13cluster)
+plot_ly(EDM13, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-12]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM13$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+```
+
+EDM Statistics {.sidebar data-width=300}
+-----------------------------------------------------------------------
+
+There are `r length(unique(EDM13a$Asset))` titles in this EDM
+
+On average, there are `r round(mean(edm13stats$n),2)` views per title.
+
+The most popular title in this EDM and its view count is: `r head(subset(edm13stats, edm13stats[,2] == max(edm13stats$n)),1)` views. 
+
+The highest viewing cluster and its cumulative view count is: `r head(subset(edm13cluster, edm13cluster[,2] == max(edm13cluster$n)),1)` views.
+
+The lowest viewing cluster and its cumulative view count is `r head(subset(edm13cluster, edm13cluster[,2] == min(edm13cluster$n)),1)` views. 
+
+There is/are `r length(unique(na13$Asset))` title(s) without views from any cluster: `r unique(na13$Asset)`
+
+`r names(EDM[n-13])` {data-navmenu="EDM"}
+===========================================
+### `r if(length(unique(EDM14$Asset))>7){print("Drag graph to see more")}`
+```{r EDM14}
+edm14stats <- EDM14 %>% group_by(Asset) %>% tally()
+edm14cluster <- EDM14 %>% group_by(Cluster) %>% tally()
+edm14cluster <- na.omit(edm14cluster)
+plot_ly(EDM14, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-13]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM14$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+```
+
+EDM Statistics {.sidebar data-width=300}
+-----------------------------------------------------------------------
+
+There are `r length(unique(EDM14a$Asset))` titles in this EDM
+
+On average, there are `r round(mean(edm14stats$n),2)` views per title.
+
+The most popular title in this EDM and its view count is: `r head(subset(edm14stats, edm14stats[,2] == max(edm14stats$n)),1)` views. 
+
+The highest viewing cluster and its cumulative view count is: `r head(subset(edm14cluster, edm14cluster[,2] == max(edm14cluster$n)),1)` views.
+
+The lowest viewing cluster and its cumulative view count is `r head(subset(edm14cluster, edm14cluster[,2] == min(edm14cluster$n)),1)` views. 
+
+There is/are `r length(unique(na14$Asset))` title(s) without views from any cluster: `r unique(na14$Asset)`
+
+`r names(EDM[n-14])` {data-navmenu="EDM"}
+===========================================
+### `r if(length(unique(EDM15$Asset))>7){print("Drag graph to see more")}`
+```{r EDM15}
+edm15stats <- EDM15 %>% group_by(Asset) %>% tally()
+edm15cluster <- EDM15 %>% group_by(Cluster) %>% tally()
+edm15cluster <- na.omit(edm15cluster)
+plot_ly(EDM15, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-14]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM15$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+```
+
+EDM Statistics {.sidebar data-width=400}
+-----------------------------------------------------------------------
+
+There are `r length(unique(EDM15a$Asset))` titles in this EDM
+
+On average, there are `r round(mean(edm15stats$n),2)` views per title.
+
+The most popular title in this EDM and its view count is: `r head(subset(edm15stats, edm15stats[,2] == max(edm15stats$n)),1)` views. 
+
+The highest viewing cluster and its cumulative view count is: `r head(subset(edm15cluster, edm15cluster[,2] == max(edm15cluster$n)),1)` views.
+
+The lowest viewing cluster and its cumulative view count is `r head(subset(edm15cluster, edm15cluster[,2] == min(edm15cluster$n)),1)` views. 
+
+There is/are `r length(unique(na15$Asset))` title(s) without views from any cluster: `r unique(na15$Asset)`
+
+Summary  {data-orientation=columns}
+===========================================
+
+Column {data-width=350}
+-----------------------------------
+
+### Total Harvard views **Security** 
+
+```{r Social}
+So <- filter(clusteranalysis,Cluster == "Security") %>% summarise(Cluster=n())
+valueBox(So, icon = "fa-shield-alt", color = "#1ABC9C")
+```
+
+
+### Total Harvard views **Social** 
+
+```{r Infrastructure}
+In <- filter(clusteranalysis,Cluster == "Social") %>% summarise(Cluster=n())
+valueBox(In, icon = "fa-user", color = "#48C9B0")
+```
+
+
+### Total Harvard views **Infrastructure**
+
+```{r Central Admin Sector}
+CA <- filter(clusteranalysis,Cluster == "Infrastructure and Environment") %>% summarise(Cluster=n())
+valueBox(CA, icon = "fa-building", color = "#76D7C4")
+```
+
+
+### Total Harvard views **Central Admin** 
+
+```{r Security}
+Sec <- filter(clusteranalysis,Cluster == "Central Administration") %>% summarise(Cluster=n())
+valueBox(Sec, icon = "fa-home", color = "#A3E4D7")  
+```
+
+### Total Harvard views **Economy Building** 
+
+```{r Economy}
+Eco <- filter(clusteranalysis,Cluster == "Economy Building") %>% summarise(Cluster=n())
+valueBox(Eco, icon = "fa-coins", color = "#D1F2EB")
+totalH$n <- as.numeric(totalH$n)
+```
+
+### % of Harvard views from **TCs** 
+
+```{r others}
+other <- filter(clusteranalysis,Cluster == "TCs") %>% summarise(Cluster=n())
+otherspercent <-sum(other)/sum(totalH$n)*100
+valueBox(round(otherspercent), icon = "fa-percent", color = "#E8F8F5")
+otherp <- round(otherspercent,1)
+```
+
+
+Column {data-width=350}
+-----------------------------------
+
+### Total Udemy accesses **Security** 
+
+```{r Security U}
+SecU <- filter(Uclusteranalysis,Cluster == "Security") %>% summarise(Cluster=n())
+valueBox(SecU, icon = "fa-shield-alt", color = "#2980B9")
+```
+
+
+### Total Udemy accesses **Social** 
+
+```{r Social U}
+SoU <- filter(Uclusteranalysis,Cluster == "Social") %>% summarise(Cluster=n())
+valueBox(SoU, icon = "fa-user", color = "#5499C7")
+```
+
+
+### Total Udemy accesses **Infrastructure** 
+
+```{r Infrastructure U}
+InU <- filter(Uclusteranalysis,Cluster == "Infrastructure and Environment") %>% summarise(Cluster=n())
+valueBox(InU, icon = "fa-building", color = "#7FB3D5") 
+```
+
+
+### Total Udemy accesses **Central Admin**
+
+```{r Central Admin Sector U}
+CAU <- filter(Uclusteranalysis,Cluster == "Central Administration") %>% summarise(Cluster=n())
+valueBox(CAU, icon = "fa-home", color = "#A9CCE3")
+```
+
+
+### Total Udemy accesses **Economy Building** 
+
+```{r Economy U}
+EcoU <- filter(Uclusteranalysis,Cluster == "Economy Building") %>% summarise(Cluster=n())
+valueBox(EcoU, icon = "fa-coins", color = "#D4E6F1")
+totalU$n <- as.numeric(totalU$n) 
+```
+
+### % of Udemy accesses from **TCs** 
+
+```{r others U}
+otherU <- filter(Uclusteranalysis,Cluster == "TCs") %>% summarise(Cluster=n())
+otherspercentU <-sum(otherU)/sum(totalU$n)*100
+valueBox(round(otherspercentU), icon = "fa-percent", color = "#EAF2F8")
+Uotherp <- round(otherspercentU,1)
+```
+
+
+```{r Harvard titles 2, include=FALSE}
+totalH <- clusteranalysis %>% group_by(Asset) %>% tally()
+datatable(totalH, rownames = FALSE, colnames=c('Harvard Titles', 'Count'))
+totalU <- Uclusteranalysis %>% group_by(`Course Title`) %>% tally()
+datatable(totalH, rownames = FALSE, colnames=c('Udemy Titles', 'Count'))
+```
+
+```{r include=FALSE}
+totalH$n <- as.numeric(totalH$n)
+title <- subset(totalH, totalH[,2] == max(totalH$n))
+
+totalU$n <- as.numeric(totalU$n)
+titleU <- subset(totalU, totalU[,2] == max(totalU$n))
+
+tot <- as.numeric(other+otherU)
+tot <- format(tot,scientific=FALSE)
+```
+
+Findings and Patterns {.sidebar data-width=600}
+-----------------------------------------------------------------------
+
+>Findings and Patterns
+
+Training coordinators make up `r tot` counts, which comprises `r otherp`% of Harvard views and `r Uotherp`% of Udemy accesses.
+
+The Social sector has the highest number of both Harvard views and Udemy accesses. Vice versa for the Economy Building sector.
+
+Harvard has `r round((mean(tabl$Count > 1)*100), digits = 2)`% repeated learners (>1 view) and Udemy has `r round((mean(tablU$Count > 1)*100), digits = 2)`% repeated learners (>1 course attendance).
+
+The most popular Harvard subjects are Leadership & Managing People, Organisational Development and Communication. These are consistently the top 3 subjects across all clusters. Leadership & Managing People always has at least 2 times more views than the second highest subject. The least popular subjects include Management, Finance & Accounting and Sales & Marketing.
+
+Udemy course categories that are popular across all clusters include Strategy, Communications, Personal Growth and Analytics. The least popular categories include Compliance, Ops Systems, Database and Finance Fundamenatals. An example of a cluster-unique category is Stress Management, which is only popular for the Security cluster. Also, the Social sector contributes the greatest to the popularity of the Personal Growth and Communication categories. 
+
+The most popular Harvard article and its view count is: `r title ` views. 
+
+The most popular Udemy course and its access count is: `r titleU` accesses. 
+
+* Future insights can be manually edited here on the R script. All figures, dates & numbers (including this box) will be automatically regenerated with new excel data.
+
+Data from this report was collected between `r format(Sys.Date() - 200, format = "%B %d, %Y")` and `r format(Sys.Date(), format = "%B %d, %Y")`
+    
+Created by: Civil Service College - CCE on `r format(Sys.Date(), format = "%B %d, %Y")`
+

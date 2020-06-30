@@ -19,7 +19,6 @@ library(dplyr)
 library(highcharter)
 library(tidyverse)
 library(DT)
-library(anytime)
 library(rpivotTable)
 library(viridis)
 library(RColorBrewer)
@@ -197,8 +196,7 @@ Column  {.tabset .tabset-fade}
 clusterH = select(clusteranalysis, 5,6,7,8,9,13,14,15,19)
 #rename fourth column to "Month"
 colnames(clusterH)[4] <- "Month"
-#convert column into conventional date form
-clusterH$Month<- anydate(clusterH$Month)
+clusterH$Month <- as.Date(as.character(clusterH$Month), format="%d-%b-%y")
 #display dates as solely year and month
 clusterH$Month<- format(as.Date(clusterH$Month), "%Y-%m")
 #keep 2 columns only
@@ -221,7 +219,7 @@ dfu <- as.data.frame(df2)
 #combine dataframes
 dfu <- left_join(dfh, dfu, by = "Month") 
 #plot harvard views by month
-plot_ly(dfh, x = ~Month, y = ~Freq, color = ~Cluster, colors = "Pastel1") %>%
+plot_ly(dfh, x = ~Month, y = ~Freq, color = ~Cluster, colors = "Dark2") %>%
   add_bars() %>% layout(legend = list(x = 0, y = 1), xaxis = list( type = 'date', tickformat = "%b %Y"))
 ```
 
@@ -232,7 +230,7 @@ plot_ly(dfh, x = ~Month, y = ~Freq, color = ~Cluster, colors = "Pastel1") %>%
 #group harvard data by cluster and obtain counts for each cluster
 totalH <- clusteranalysis %>% group_by(Cluster) %>% tally()
 #plot bar chart of total views by cluster
-plot_ly(totalH, x = ~Cluster, y = ~n, color = ~Cluster, colors = "Pastel1", type = 'bar') %>%
+plot_ly(totalH, x = ~Cluster, y = ~n, color = ~Cluster, colors = "Dark2", type = 'bar') %>%
 layout(yaxis = list(title = 'Total Harvard Titles'),xaxis = list(title = "Cluster")) %>% layout(showlegend=FALSE)
 ```
 
@@ -254,7 +252,7 @@ plot_ly(tablh, type = "bar", x = ~Cluster, y = ~Count, color = ~pal1(Count)) %>%
 ### Top Central
 
 ```{r Central Admin Summary H}
-#Harvard
+#Harvard Central Admin Datatable
 CAtitle <- filter(clusteranalysis,Cluster == "Central Administration") %>% group_by(Asset) %>% summarise(Cluster=n())
 CAtitle <- CAtitle  %>%
      arrange(desc(Cluster))
@@ -270,6 +268,7 @@ datatable(CAtitle, rownames = FALSE, colnames=c('Harvard Titles for Central Admi
 ### Top Infrastructure
 
 ```{r Infrastructure summary H}
+#Harvard Infrastructure Datatable
 INtitle <- filter(clusteranalysis,Cluster == "Infrastructure and Environment") %>% group_by(Asset) %>% summarise(group=n())
 INtitle <- INtitle  %>%
      arrange(desc(group))
@@ -281,6 +280,7 @@ datatable(INtitle, rownames = FALSE, colnames=c('Harvard Titles for Infrastructu
 ### Top Social
 
 ```{r Social summary H}
+#Harvard Social Datatable
 SOtitle <- filter(clusteranalysis,Cluster == "Social") %>% group_by(Asset) %>% summarise(Cluster=n())
 SOtitle <- SOtitle  %>%
      arrange(desc(Cluster))
@@ -293,6 +293,7 @@ datatable(SOtitle, rownames = FALSE, colnames=c('Harvard Titles for Social Secto
 ### Top Security
 
 ```{r Security summary H}
+#Harvard Security Datatable
 SEtitle <- filter(clusteranalysis,Cluster == "Security") %>% group_by(Asset) %>% summarise(Cluster=n())
 SEtitle <- SEtitle  %>%
      arrange(desc(Cluster))
@@ -305,6 +306,7 @@ datatable(SEtitle, rownames = FALSE, colnames=c('Harvard Titles for Security Sec
 ### Top Economy
 
 ```{r Economy summary H}
+#Harvard Economy Datatable
 ECtitle <- filter(clusteranalysis,Cluster == "Economy Building") %>% group_by(Asset) %>% summarise(Cluster=n())
 ECtitle <- ECtitle  %>%
      arrange(desc(Cluster))
@@ -322,8 +324,9 @@ Column  {.tabset .tabset-fade}
 ### Month-Udemy
 
 ```{r month U}
+#Barplot of Udemy accesses per month by cluster
 dfu <- dfu %>% rename(Freq = Freq.y)
-plot_ly(dfu, x = ~Month, y = ~Freq, color = ~Cluster.y, colors = "Pastel1") %>%
+plot_ly(dfu, x = ~Month, y = ~Freq, color = ~Cluster.y, colors = "Dark2") %>%
   add_bars() %>% layout(legend = list(x = 0, y = 1), xaxis = list( type = 'date', tickformat = "%b %Y"))
 ```
 
@@ -331,7 +334,7 @@ plot_ly(dfu, x = ~Month, y = ~Freq, color = ~Cluster.y, colors = "Pastel1") %>%
 
 ```{r Udemy overview}
 totalU <- Uclusteranalysis %>% group_by(Cluster) %>% tally() 
-plot_ly(totalU, x = ~Cluster, y = ~n, color = ~Cluster, colors = "Pastel1", type = 'bar') %>%
+plot_ly(totalU, x = ~Cluster, y = ~n, color = ~Cluster, colors = "Dark2", type = 'bar') %>%
 layout(yaxis = list(title = 'Total Udemy Titles'),xaxis = list(title = "Cluster")) %>% layout(showlegend=FALSE)
 ```
 
@@ -415,7 +418,7 @@ Time Series
 ========================================
 
 ```{r monthly plot H}
-clusteranalysis$Last.Activity.Date <- anydate(clusteranalysis$Last.Activity.Date)
+clusteranalysis$Last.Activity.Date <- as.Date(as.character(clusteranalysis$Last.Activity.Date), format="%d-%b-%y")
 clusteH <- clusteranalysis[rev(order(as.Date(clusteranalysis$Last.Activity.Date))),]
 tsh <- as.data.frame(table(clusteH$Last.Activity.Date))
 
@@ -860,7 +863,7 @@ EDM15$wrappedx <- sapply(EDM15$Asset,
 edm1stats <- EDM1a %>% group_by(Asset) %>% tally()
 edm1cluster <- EDM1 %>% group_by(Cluster) %>% tally()
 edm1cluster <- na.omit(edm1cluster)
-plot_ly(EDM1, type = "bar", x = ~wrappedx, y = ~Count, text = ~Cluster, textposition = "auto", hoverinfo = "text", color = ~Cluster, colors = "Pastel1") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n]), xaxis = list(title=FALSE, tickangle = 0,  range = c(0,if(length(unique(EDM1$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+plot_ly(EDM1, type = "bar", x = ~wrappedx, y = ~Count, text = ~Cluster, textposition = "auto", hoverinfo = "text", color = ~Cluster, colors = "Dark2") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n]), xaxis = list(title=FALSE, tickangle = 0,  range = c(0,if(length(unique(EDM1$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
 ```
 
 EDM Statistics {.sidebar data-width=300}
@@ -886,7 +889,7 @@ There is/are `r length(unique(na1$Asset))` title(s) without views from any clust
 edm2stats <- EDM2a %>% group_by(Asset) %>% tally()
 edm2cluster <- EDM2 %>% group_by(Cluster) %>% tally()
 edm2cluster <- na.omit(edm2cluster)
-plot_ly(EDM2, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-1]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM2$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+plot_ly(EDM2, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Dark2", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-1]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM2$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
 ```
 
 EDM Statistics {.sidebar data-width=300}
@@ -911,7 +914,7 @@ There is/are `r length(unique(na2$Asset))` title(s) without views from any clust
 edm3stats <- EDM3a %>% group_by(Asset) %>% tally()
 edm3cluster <- EDM3 %>% group_by(Cluster) %>% tally()
 edm3cluster <- na.omit(edm3cluster)
-plot_ly(EDM3, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-2]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM3$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+plot_ly(EDM3, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Dark2", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-2]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM3$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
 ```
 
 EDM Statistics {.sidebar data-width=300}
@@ -936,7 +939,7 @@ There is/are `r length(unique(na3$Asset))` title(s) without views from any clust
 edm4stats <- EDM4a %>% group_by(Asset) %>% tally()
 edm4cluster <- EDM4 %>% group_by(Cluster) %>% tally()
 edm4cluster <- na.omit(edm4cluster)
-plot_ly(EDM4, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-3]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM4$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan") 
+plot_ly(EDM4, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Dark2", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-3]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM4$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan") 
 ```
 
 EDM Statistics {.sidebar data-width=300}
@@ -962,7 +965,7 @@ There is/are `r length(unique(na4$Asset))` title(s) without views from any clust
 edm5stats <- EDM5a %>% group_by(Asset) %>% tally()
 edm5cluster <- EDM5 %>% group_by(Cluster) %>% tally()
 edm5cluster <- na.omit(edm5cluster)
-plot_ly(EDM5, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-4]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM5$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+plot_ly(EDM5, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Dark2", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-4]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM5$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
 ```
 
 EDM Statistics {.sidebar data-width=300}
@@ -987,7 +990,7 @@ There is/are `r length(unique(na5$Asset))` title(s) without views from any clust
 edm6stats <- EDM6a %>% group_by(Asset) %>% tally()
 edm6cluster <- EDM6 %>% group_by(Cluster) %>% tally()
 edm6cluster <- na.omit(edm6cluster)
-plot_ly(EDM6, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-5]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM6$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+plot_ly(EDM6, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Dark2", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-5]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM6$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
 ```
 
 EDM Statistics {.sidebar data-width=300}
@@ -1012,7 +1015,7 @@ There is/are `r length(unique(na6$Asset))` title(s) without views from any clust
 edm7stats <- EDM7a %>% group_by(Asset) %>% tally()
 edm7cluster <- EDM7 %>% group_by(Cluster) %>% tally()
 edm7cluster <- na.omit(edm7cluster)
-plot_ly(EDM7, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-6]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM7$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+plot_ly(EDM7, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Dark2", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-6]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM7$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
 ```
 
 EDM Statistics {.sidebar data-width=300}
@@ -1037,7 +1040,7 @@ There is/are `r length(unique(na7$Asset))` title(s) without views from any clust
 edm8stats <- EDM8a %>% group_by(Asset) %>% tally()
 edm8cluster <- EDM8 %>% group_by(Cluster) %>% tally()
 edm8cluster <- na.omit(edm8cluster)
-plot_ly(EDM8, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-7]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM8$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+plot_ly(EDM8, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Dark2", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-7]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM8$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
 ```
 
 EDM Statistics {.sidebar data-width=300}
@@ -1062,7 +1065,7 @@ There is/are `r length(unique(na8$Asset))` title(s) without views from any clust
 edm9stats <- EDM9a %>% group_by(Asset) %>% tally()
 edm9cluster <- EDM9 %>% group_by(Cluster) %>% tally()
 edm9cluster <- na.omit(edm9cluster)
-plot_ly(EDM9, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-8]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM9$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+plot_ly(EDM9, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Dark2", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-8]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM9$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
 ```
 
 EDM Statistics {.sidebar data-width=300}
@@ -1087,7 +1090,7 @@ There is/are `r length(unique(na9$Asset))` title(s) without views from any clust
 edm10stats <- EDM10a %>% group_by(Asset) %>% tally()
 edm10cluster <- EDM10 %>% group_by(Cluster) %>% tally()
 edm10cluster <- na.omit(edm10cluster)
-plot_ly(EDM10, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-9]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM10$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+plot_ly(EDM10, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Dark2", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-9]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM10$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
 ```
 
 EDM Statistics {.sidebar data-width=300}
@@ -1112,7 +1115,7 @@ There is/are `r length(unique(na10$Asset))` title(s) without views from any clus
 edm11stats <- EDM11a %>% group_by(Asset) %>% tally()
 edm11cluster <- EDM11 %>% group_by(Cluster) %>% tally()
 edm11cluster <- na.omit(edm11cluster)
-plot_ly(EDM11, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-10]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM11$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+plot_ly(EDM11, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Dark2", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-10]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM11$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
 ```
 
 EDM Statistics {.sidebar data-width=300}
@@ -1137,7 +1140,7 @@ There is/are `r length(unique(na11$Asset))` title(s) without views from any clus
 edm12stats <- EDM12a %>% group_by(Asset) %>% tally()
 edm12cluster <- EDM12 %>% group_by(Cluster) %>% tally()
 edm12cluster <- na.omit(edm12cluster)
-plot_ly(EDM12, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-11]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM12$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+plot_ly(EDM12, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Dark2", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-11]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM12$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
 ```
 
 EDM Statistics {.sidebar data-width=300}
@@ -1162,7 +1165,7 @@ There is/are `r length(unique(na12$Asset))` title(s) without views from any clus
 edm13stats <- EDM13 %>% group_by(Asset) %>% tally()
 edm13cluster <- EDM13 %>% group_by(Cluster) %>% tally()
 edm13cluster <- na.omit(edm13cluster)
-plot_ly(EDM13, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-12]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM13$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+plot_ly(EDM13, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Dark2", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-12]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM13$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
 ```
 
 EDM Statistics {.sidebar data-width=300}
@@ -1187,7 +1190,7 @@ There is/are `r length(unique(na13$Asset))` title(s) without views from any clus
 edm14stats <- EDM14 %>% group_by(Asset) %>% tally()
 edm14cluster <- EDM14 %>% group_by(Cluster) %>% tally()
 edm14cluster <- na.omit(edm14cluster)
-plot_ly(EDM14, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-13]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM14$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+plot_ly(EDM14, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Dark2", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-13]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM14$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
 ```
 
 EDM Statistics {.sidebar data-width=300}
@@ -1212,7 +1215,7 @@ There is/are `r length(unique(na14$Asset))` title(s) without views from any clus
 edm15stats <- EDM15 %>% group_by(Asset) %>% tally()
 edm15cluster <- EDM15 %>% group_by(Cluster) %>% tally()
 edm15cluster <- na.omit(edm15cluster)
-plot_ly(EDM15, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Pastel1", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-14]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM15$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
+plot_ly(EDM15, type = "bar", x = ~wrappedx, y = ~Count, color = ~Cluster, colors = "Dark2", text = ~Cluster, textposition = "auto", hoverinfo = "text") %>% layout(barmode = "stack") %>% layout(title = names(EDM[n-14]),xaxis = list(title=FALSE, tickangle = 0, range = c(0,if(length(unique(EDM15$Asset))>7){7})), yaxis = list(title="Count by Cluster"), dragmode = "pan")
 ```
 
 EDM Statistics {.sidebar data-width=400}

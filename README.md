@@ -1,2 +1,2 @@
 # Marketing-Dashboard
-An interactive dashboard to help analyze marketing efforts. Made with flexdashboard on R.
+An interactive dashboard to help analyse marketing results. Made with R flexdashboard.
